@@ -15,48 +15,49 @@ library(maps)
 library(maptools)
 library(classInt)
 library(foreign)
+library(spatial)
+library(ggplot2)
+library()
 
-
-map <- readShapePoly("J:/Project/Evaluation/GAVI/mapping/uga/output/uga_analytic_area_map.shp")
-names <- read.dbf("J:/Project/Evaluation/GAVI/mapping/uga/output/uga_analytic_area_map.dbf", as.is = FALSE)
-child <- read.csv("J:/Project/Evaluation/GAVI/hhs/uga/data_production/release/child_external.csv",
-                  numerals="no.loss")
-# length(unique(child$customid))
-col_classes <- sapply(child[1,], class)
-col_classes["custom_id"] <- "character"
-child2 <- read.csv("J:/Project/Evaluation/GAVI/hhs/uga/data_production/release/child_external.csv",
-                  colClasses=col_classes)
-household <- read.csv("J:/Project/Evaluation/GAVI/hhs/uga/data_production/release/household_external.csv",
-                      numerals="no.loss")
-col_classes <- sapply(household[1,], class)
-col_classes["custom_id"] <-"character"
-household2 <- read.csv("J:/Project/Evaluation/GAVI/hhs/uga/data_production/release/household_external.csv",
-                           colClasses=col_classes)
-summary()
-
-# Set up plot_uga function used in homework 1
-plot_uga <- function(plotvar, title_, nclr=8, brks=NULL){
-    # plots a map of uganda counties assuimg the plotvar argument is of
-    # length 88 where each value represents an Ohio county sorted by 
-    # fips number.
-    if(length(plotvar) != 113){
-        stop("'plotvar' argument must be of length 88")
-    }
-    # next few lines set up the color scheme for plotting
-    plotclr <- brewer.pal(nclr,"BuPu")
-    if (is.null(brks)){
-        brks <- round(quantile(plotvar,probs=seq(0,1,1/(nclr))),digits=1)
-    }
-    colornum <- findInterval(plotvar,brks,all.inside=T)
-    colcode <- plotclr[colornum]
-    # Note order of data in file is in terms of increasing FIPS codes, 
-    # which is the same as in the map function (see county.fips)
-    map("county", "ohio",col=colcode,fill=T)
-    title(title_)
-    leg.txt <- paste("[",brks[nclr],",",brks[nclr+1],"]",sep="")
-    for(i in (nclr-1):1){
-        leg.txt <- append(leg.txt,paste("[",brks[i],",",brks[i+1],")",sep=""))
-    }
-    leg.txt <- rev(leg.txt)
-    legend("bottomright",legend=leg.txt,fill=plotclr,bty="n",cex=.8)
+if(.Platform$OS.type == "windows"){
+    setwd("J:/Project/Evaluation/GAVI/")
 }
+if(.Platform$OS.type == "unix"){
+    setwd("/home/j/Project/Evaluation/GAVI/")
+}
+
+.Platform$OS.type
+
+map <- readShapePoly("mapping/uga/output/uga_analytic_area_map.shp")
+names <- read.dbf("mapping/uga/output/uga_analytic_area_map.dbf", as.is = FALSE)
+child <- read.csv("hhs/uga/data_production/release/child_external.csv",
+                  numerals="no.loss")
+
+household <- read.csv("hhs/uga/data_production/release/household_external.csv",
+                      numerals="no.loss")
+household <- subset(household, longitude != 0)
+switch_me <- (household$lat_which == "S 0") & !is.na(household$latitude)
+switch_me[is.na(switch_me)] <- FALSE
+household$latitude[switch_me] <- 
+    household$latitude[switch_me] * -1
+
+projection <- "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"
+proj4string(map) <- projection
+
+pointdf <- SpatialPointsDataFrame(coords=household[,c("latitude", "longitude")],
+                                  data=household[,c("customid", "hh_rooms")],
+                                  proj4string = CRS(projection))
+
+polygondf <- fortify(map)
+uganda_point_plot <- ggplot() +
+    geom_polygon(data=polygondf, aes(x=long,y=lat,group=group), 
+                 fill='grey90', color='grey') +
+    geom_point(data=household[,c("latitude", "longitude")], 
+               aes(x=longitude, y=latitude), col="red",pch=20,cex=.03) +
+    coord_fixed() +
+    ggtitle("Households") +
+    theme_minimal() 
+
+uganda_point_plot
+
+spplot(map,"dist77")
